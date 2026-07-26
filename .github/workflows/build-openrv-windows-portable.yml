@@ -1,0 +1,62 @@
+name: Build OpenRV Windows Portable
+
+on:
+  workflow_dispatch:
+    inputs:
+      openrv_ref:
+        description: OpenRV tag or branch
+        required: true
+        default: v4.0.1
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    name: Build Windows x64
+    runs-on: windows-2022
+    timeout-minutes: 360
+
+    env:
+      SCCACHE_GHA_ENABLED: false
+
+    steps:
+      - name: Checkout official OpenRV
+        uses: actions/checkout@v4
+        with:
+          repository: AcademySoftwareFoundation/OpenRV
+          ref: ${{ inputs.openrv_ref }}
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Build OpenRV
+        uses: ./.github/actions/build-windows
+        with:
+          build-type: Release
+          qt-version: "6.5.3"
+          python-version: "3.11"
+          cmake-version: "3.31.6"
+          vfx-platform: "CY2025"
+          msvc-component: "14.40.17.10.x86.x64"
+          msvc-compiler: "14.40.33807"
+
+      - name: Verify portable build
+        shell: pwsh
+        run: |
+          $rv = Get-ChildItem -Path "_install" -Recurse -Filter "rv.exe" |
+            Select-Object -First 1
+
+          if (-not $rv) {
+            throw "rv.exe was not found in _install"
+          }
+
+          Write-Host "Found OpenRV executable:"
+          Write-Host $rv.FullName
+
+      - name: Upload portable ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenRV-${{ inputs.openrv_ref }}-Windows-x64
+          path: _install/**
+          if-no-files-found: error
+          retention-days: 14
